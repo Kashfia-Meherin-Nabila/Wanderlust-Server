@@ -5,6 +5,7 @@ const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
 const { MongoClient, ServerApiVersion } = require("mongodb");
+const { ObjectId } = require("mongodb");
 dotenv.config();
 
 const uri = process.env.MONGODB_URI;
@@ -12,8 +13,8 @@ const uri = process.env.MONGODB_URI;
 const app = express();
 const PORT = process.env.PORT;
 
-app.use(cors())
-app.use(express.json())
+app.use(cors());
+app.use(express.json());
 
 const client = new MongoClient(uri, {
   serverApi: {
@@ -30,12 +31,20 @@ async function run() {
     const db = client.db("wanderlust");
     const destinationCollection = db.collection("destinations");
 
-
-    app.get('/destinations', async(req, res) =>{
-      const result =await destinationCollection.find().toArray();
-      res.json(result)
+    // get destination from the server
+    app.get("/destinations", async (req, res) => {
+      const result = await destinationCollection.find().toArray();
+      res.json(result);
     });
-
+    // destination details
+    app.get("/destinations/:id", async (req, res) => {
+      const { id } = req.params;
+      const result = await destinationCollection.findOne({
+        _id: new ObjectId(id),
+      });
+      res.json(result);
+    });
+    // Add-destination to the database
     app.post("/destination", async (req, res) => {
       const destinationData = req.body;
       const result = await destinationCollection.insertOne(destinationData);
