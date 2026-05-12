@@ -30,6 +30,12 @@ async function run() {
     const db = client.db("wanderlust");
     const destinationCollection = db.collection("destinations");
 
+
+    app.get('/destinations', async(req, res) =>{
+      const result =await destinationCollection.find().toArray();
+      res.json(result)
+    });
+
     app.post("/destination", async (req, res) => {
       const destinationData = req.body;
       const result = await destinationCollection.insertOne(destinationData);
