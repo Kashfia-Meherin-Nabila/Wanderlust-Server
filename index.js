@@ -30,6 +30,7 @@ async function run() {
 
     const db = client.db("wanderlust");
     const destinationCollection = db.collection("destinations");
+    const bookingCollection = db.collection("bookings");
 
     // get destination from the server
     app.get("/destinations", async (req, res) => {
@@ -50,6 +51,7 @@ async function run() {
       const result = await destinationCollection.insertOne(destinationData);
       res.json(result);
     });
+    
 
     app.patch("/destinations/:id", async (req, res) => {
       try {
@@ -83,6 +85,13 @@ async function run() {
       const result = await destinationCollection.deleteOne({
         _id: new ObjectId(id),
       });
+      res.json(result);
+    });
+
+    // booking destination
+    app.post("/booking", async (req, res) => {
+      const bookingData = req.body;
+      const result = await bookingCollection.insertOne(bookingData);
       res.json(result);
     });
 
