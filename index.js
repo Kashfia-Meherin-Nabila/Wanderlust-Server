@@ -88,12 +88,45 @@ async function run() {
       res.json(result);
     });
 
+    // get booking info
+    app.get("/booking/:userId", async (req, res) => {
+      const {userId} = req.params
+      const result = await bookingCollection.find({userId: userId}).toArray();
+      res.json(result);
+    });
+
     // booking destination
     app.post("/booking", async (req, res) => {
       const bookingData = req.body;
       const result = await bookingCollection.insertOne(bookingData);
       res.json(result);
     });
+
+    // Delete booking
+app.delete("/booking/:bookingId", async (req, res) => {
+  try {
+    const { bookingId } = req.params; // Changed 'id' to 'bookingId'
+
+    const result = await bookingCollection.deleteOne({
+      _id: new ObjectId(bookingId),
+    });
+
+    if (result.deletedCount === 1) {
+      res
+        .status(200)
+        .json({ success: true, message: "Booking deleted successfully" });
+    } else {
+      res.status(404).json({ success: false, message: "Booking not found" });
+    }
+  } catch (error) {
+    console.error("Error deleting booking:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+
+
+
 
     await client.db("admin").command({ ping: 1 });
     console.log(
