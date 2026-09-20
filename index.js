@@ -6,6 +6,8 @@ const dotenv = require("dotenv");
 const cors = require("cors");
 const { MongoClient, ServerApiVersion } = require("mongodb");
 const { ObjectId } = require("mongodb");
+const { ChildProcess } = require("node:child_process");
+const { createRemoteJWKSet, jwtVerify } = require("jose-cjs");
 dotenv.config();
 
 const uri = process.env.MONGODB_URI;
@@ -23,6 +25,60 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   },
 });
+const JWKS = createRemoteJWKSet(new URL("http://localhost:3000/api/auth/jwks"));
+
+const verifyToken = async (req, res, next) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    // 1. Check authorization header
+    if (!authHeader) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: No token provided",
+      });
+    }
+
+    // 2. Validate Bearer format
+    const [scheme, token, ...extra] = authHeader.split(" ");
+
+    if (scheme !== "Bearer" || !token || extra.length > 0) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: Invalid token format",
+      });
+    }
+
+    // 3. Verify JWT signature and claims
+    const { payload } = await jwtVerify(token, JWKS);
+
+    // 4. Store verified user information
+    req.user = payload;
+    // console.log(payload);
+    // 5. Continue to the next middleware/route
+    next();
+  } catch (error) {
+    // Invalid or expired JWT
+    if (
+      error.code === "ERR_JWT_INVALID" ||
+      error.code === "ERR_JWS_SIGNATURE_VERIFICATION_FAILED" ||
+      error.code === "ERR_JWT_EXPIRED" ||
+      error.code === "ERR_JWS_INVALID"
+    ) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: Invalid or expired token",
+      });
+    }
+
+    console.error("Authentication error:", error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: "Authentication service error",
+    });
+  }
+};
 
 async function run() {
   try {
@@ -37,23 +93,24 @@ async function run() {
       const result = await destinationCollection.find().toArray();
       res.json(result);
     });
+
     // destination details
-    app.get("/destinations/:id", async (req, res) => {
+    app.get("/destinations/:id", verifyToken, async (req, res) => {
       const { id } = req.params;
       const result = await destinationCollection.findOne({
         _id: new ObjectId(id),
       });
       res.json(result);
     });
+
     // Add-destination to the database
-    app.post("/destination", async (req, res) => {
+    app.post("/destination",verifyToken, async (req, res) => {
       const destinationData = req.body;
       const result = await destinationCollection.insertOne(destinationData);
       res.json(result);
     });
-    
 
-    app.patch("/destinations/:id", async (req, res) => {
+    app.patch("/destinations/:id",verifyToken, async (req, res) => {
       try {
         const { id } = req.params;
 
@@ -80,7 +137,7 @@ async function run() {
 
     // delete destination
 
-    app.delete("/destinations/:id", async (req, res) => {
+    app.delete("/destinations/:id",verifyToken, async (req, res) => {
       const { id } = req.params;
       const result = await destinationCollection.deleteOne({
         _id: new ObjectId(id),
@@ -89,9 +146,9 @@ async function run() {
     });
 
     // get booking info
-    app.get("/booking/:userId", async (req, res) => {
-      const {userId} = req.params
-      const result = await bookingCollection.find({userId: userId}).toArray();
+    app.get("/booking/:userId", verifyToken, async (req, res) => {
+      const { userId } = req.params;
+      const result = await bookingCollection.find({ userId: userId }).toArray();
       res.json(result);
     });
 
@@ -103,30 +160,28 @@ async function run() {
     });
 
     // Delete booking
-app.delete("/booking/:bookingId", async (req, res) => {
-  try {
-    const { bookingId } = req.params; // Changed 'id' to 'bookingId'
+    app.delete("/booking/:bookingId",verifyToken, async (req, res) => {
+      try {
+        const { bookingId } = req.params; // Changed 'id' to 'bookingId'
 
-    const result = await bookingCollection.deleteOne({
-      _id: new ObjectId(bookingId),
+        const result = await bookingCollection.deleteOne({
+          _id: new ObjectId(bookingId),
+        });
+
+        if (result.deletedCount === 1) {
+          res
+            .status(200)
+            .json({ success: true, message: "Booking deleted successfully" });
+        } else {
+          res
+            .status(404)
+            .json({ success: false, message: "Booking not found" });
+        }
+      } catch (error) {
+        console.error("Error deleting booking:", error);
+        res.status(500).json({ success: false, error: error.message });
+      }
     });
-
-    if (result.deletedCount === 1) {
-      res
-        .status(200)
-        .json({ success: true, message: "Booking deleted successfully" });
-    } else {
-      res.status(404).json({ success: false, message: "Booking not found" });
-    }
-  } catch (error) {
-    console.error("Error deleting booking:", error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-
-
-
 
     await client.db("admin").command({ ping: 1 });
     console.log(
