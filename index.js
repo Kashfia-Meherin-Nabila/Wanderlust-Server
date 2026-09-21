@@ -87,6 +87,7 @@ async function run() {
     const db = client.db("wanderlust");
     const destinationCollection = db.collection("destinations");
     const bookingCollection = db.collection("bookings");
+    const userCollection = db.collection("user");
 
     // get destination from the server
     app.get("/destinations", async (req, res) => {
@@ -182,6 +183,128 @@ async function run() {
         res.status(500).json({ success: false, error: error.message });
       }
     });
+
+    // profile 
+    app.get("/profile", verifyToken, async (req, res) => {
+      try {
+        const email = req.user.email;
+
+        if (!email) {
+          return res.status(401).json({
+            success: false,
+            message: "Email missing from verified token",
+          });
+        }
+
+        const user = await userCollection.findOne(
+          { email },
+          {
+            projection: {
+              name: 1,
+              email: 1,
+              image: 1,
+              createdAt: 1,
+            },
+          }
+        );
+
+        if (!user) {
+          return res.status(404).json({
+            success: false,
+            message: "User not found",
+          });
+        }
+
+        res.status(200).json({
+          success: true,
+          user,
+        });
+      } catch (error) {
+        console.error("Get profile error:", error);
+
+        res.status(500).json({
+          success: false,
+          message: "Failed to fetch profile",
+        });
+      }
+    });
+
+    // UPDATE logged-in user's name and image
+    app.patch("/profile", verifyToken, async (req, res) => {
+      try {
+        const email = req.user.email;
+        const { name, image } = req.body;
+
+        if (!email) {
+          return res.status(401).json({
+            success: false,
+            message: "Email missing from verified token",
+          });
+        }
+
+        if (typeof name !== "string" || !name.trim()) {
+          return res.status(400).json({
+            success: false,
+            message: "Name is required",
+          });
+        }
+
+        if (
+          image !== undefined &&
+          image !== null &&
+          typeof image !== "string"
+        ) {
+          return res.status(400).json({
+            success: false,
+            message: "Image must be a string or null",
+          });
+        }
+
+        const result = await userCollection.updateOne(
+          { email },
+          {
+            $set: {
+              name: name.trim(),
+              image: image?.trim() || null,
+              updatedAt: new Date(),
+            },
+          }
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(404).json({
+            success: false,
+            message: "User not found",
+          });
+        }
+
+        const updatedUser = await userCollection.findOne(
+          { email },
+          {
+            projection: {
+              name: 1,
+              email: 1,
+              image: 1,
+              createdAt: 1,
+            },
+          }
+        );
+
+        res.status(200).json({
+          success: true,
+          message: "Profile updated successfully",
+          user: updatedUser,
+        });
+      } catch (error) {
+        console.error("Update profile error:", error);
+
+        res.status(500).json({
+          success: false,
+          message: "Failed to update profile",
+        });
+      }
+    });
+    
 
     //await client.db("admin").command({ ping: 1 });
     console.log(
